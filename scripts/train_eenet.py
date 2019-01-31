@@ -18,10 +18,12 @@ from util.utils import weight_init, set_gpu_mode, zeros, get_numpy
 from util.eebuilder import EndEffectorPositionDataset
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"]= "1, 2"
+# os.environ["CUDA_VISIBLE_DEVICES"]= "1, 2"
 
 _LOSS = nn.NLLLoss
-
+ROOT_DIR = '/home/msieb/projects/bullet-demonstrations/experiments/reach/data'
+IMG_HEIGHT = 480
+IMG_WIDTH = 640
 # plt.ion()
 
 def compute_acc(labels_pred, y):
@@ -106,8 +108,6 @@ def train(model, loader_tr, loader_t, lr=1e-4, epochs=1000, use_cuda=True):
         show_heatmap_of_samples(dataiter, model)
         
         for xb, yb in t_batches:
-
-
             if use_cuda:
                 xb = xb.cuda()
                 yb = yb.cuda()
@@ -162,7 +162,7 @@ def train(model, loader_tr, loader_t, lr=1e-4, epochs=1000, use_cuda=True):
     return logs
 
 def create_model(args, use_cuda=True):
-    model = define_model(240, 240, use_cuda)
+    model = define_model(IMG_HEIGHT, IMG_WIDTH, use_cuda)
     # tcn = PosNet()
     if args.load_model:
         model_path = os.path.join(
@@ -179,24 +179,21 @@ if __name__ == '__main__':
     set_gpu_mode(True)
     logging.getLogger().setLevel(logging.INFO)
     parser = argparse.ArgumentParser()
-    root_dir = '/home/msieb/projects/bullet-demonstrations/experiments/reach/data'
-    # parser.add_argument('--x_data', '-x', type=str, default=join(data_dir, 'relative_end_effector_states.npy'))
-    # parser.add_argument('--u_data', '-u', type=str, default=join(data_dir, 'action_states.npy'))
-    # parser.add_argument('--cube_data', '-c', type=str, default=join(data_dir, 'cube_states.npy'))
-    parser.add_argument('--out_dir', '-o', type=str, default='output/rn_rigid')
     parser.add_argument('--test_size', '-t', type=float, default=0.2)
     parser.add_argument('--epochs', '-e', type=int, default=100)
     parser.add_argument('--learning_rate', '-r', type=float, default=1e-4)
-    parser.add_argument('--batch_size', '-b', type=int, default=2)
+    parser.add_argument('--batch_size', '-b', type=int, default=1)
     parser.add_argument('--load_model', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default='')
-    
+    parser.add_argument('--root_dir', type=str, default=ROOT_DIR)
+    parser.add_argument('-sf', '--load_data_and_labels_from_same_folder', action='store_true')
+
     args = parser.parse_args()
 
-    logging.info('Loading {}'.format(root_dir))
+    logging.info('Loading {}'.format(args.root_dir))
     logging.info('Processing Data')
     
-    dataset = EndEffectorPositionDataset(root_dir=root_dir)
+    dataset = EndEffectorPositionDataset(root_dir=args.root_dir, load_data_and_labels_from_same_folder=args.load_data_and_labels_from_same_folder)
     n = len(dataset)
     n_test = int( n * .2 )  # number of test/val elements
     n_train = n - 2 * n_test
