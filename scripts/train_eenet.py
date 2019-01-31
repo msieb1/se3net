@@ -101,7 +101,7 @@ def train(model, loader_tr, loader_t, lr=1e-4, epochs=1000, use_cuda=True):
         loss_tr = 0
         acc_tr = 0
         t_batches = tqdm(loader_tr, leave=False, desc='Train')
-
+        import ipdb; ipdb.set_trace();
         # show heatmap of samples
         show_heatmap_of_samples(dataiter, model)
         
