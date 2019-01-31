@@ -26,7 +26,7 @@ def show_position(image, label):
 class EndEffectorPositionDataset(Dataset):
     """Face Landmarks dataset."""
 
-    def __init__(self, root_dir, transform=None, use_cuda=True):
+    def __init__(self, root_dir, transform=None, load_data_and_labels_from_same_folder=False, use_cuda=True):
         """
         Args:
             root_dir (string): Directory with all the images.
@@ -35,17 +35,34 @@ class EndEffectorPositionDataset(Dataset):
         """
         self.root_dir = root_dir
         self.transform = transform
+        self.load_data_and_labels_from_same_folder = load_data_and_labels_from_same_folder
 
     def __len__(self):
-        return len(os.listdir(join(self.root_dir, 'images')))
-
+        if not self.load_data_and_labels_from_same_folder:
+            return len(os.listdir(join(self.root_dir, 'images')))
+        else:
+            return len([f for f in os.listdir(self.root_dir) if f.endswith('.png') or f.endswith('.jpg')])
+    
     def __getitem__(self, idx):
-        img_name = join(self.root_dir,
-                                'images', '{0:06d}.png'.format(idx))
-        image = io.imread(img_name)[:, :, :-1]
-        image = np.transpose(image, (2, 0, 1)).astype(np.float32)
-        label = np.load(join(self.root_dir, 'labels', '{0:06d}.npy'.format(idx)))[:2] # only x and y needed
-        label = np.round(label).astype(np.int32)
+        if not self.load_data_and_labels_from_same_folder:
+            img_name = join(self.root_dir,
+                                    'images', '{0:06d}.png'.format(idx))
+            image = io.imread(img_name)
+            if image.shape[-1] == 4:
+                image = image[:, :, ::-1]
+            image = np.transpose(image, (2, 0, 1)).astype(np.float32)
+            label = np.load(join(self.root_dir, 'labels', '{0:06d}.npy'.format(idx)))[:2] # only x and y needed
+            label = np.round(label).astype(np.int32)
+        else:
+            img_name = join(self.root_dir,
+                                '{0:06d}.png'.format(idx))
+            image = io.imread(img_name)
+            if image.shape[-1] == 4:
+                image = image[:, :, ::-1]
+            image = np.transpose(image, (2, 0, 1)).astype(np.float32)
+            label = np.load(join(self.root_dir, 
+                                '{0:06d}.npy'.format(idx)))[:2] # only x and y needed
+            label = np.round(label).astype(np.int32)            
         buff = np.zeros((image.shape[1], image.shape[2]), dtype=np.int64)
         buff[label[1], label[0]] = 1
         label = buff
@@ -54,6 +71,8 @@ class EndEffectorPositionDataset(Dataset):
         if self.transform:
             sample = self.transform(sample)
         return sample
+
+
 
 # ee_dataset = EndEffectorPositionDataset(root_dir='/home/msieb/projects/bullet-demonstrations/experiments/reach/data')
 
