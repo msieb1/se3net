@@ -4,6 +4,7 @@ from os.path import join
 import numpy as np
 import torch
 import pandas as pd
+import skimage
 from skimage import io, transform
 import numpy as np
 import matplotlib.pyplot as plt
@@ -49,8 +50,8 @@ class EndEffectorPositionDataset(Dataset):
                                     'images', '{0:06d}.png'.format(idx))
             image = io.imread(img_name)
             if image.shape[-1] == 4:
-                image = image[:, :, ::-1]
-            image = np.transpose(image, (2, 0, 1)).astype(np.float32)
+                image = image[:, :, :-1]
+            #image = np.transpose(image, (2, 0, 1))
             label = np.load(join(self.root_dir, 'labels', '{0:06d}.npy'.format(idx)))[:2] # only x and y needed
             label = np.round(label).astype(np.int32)
         else:
@@ -58,16 +59,18 @@ class EndEffectorPositionDataset(Dataset):
                                 '{0:06d}.png'.format(idx))
             image = io.imread(img_name)
             if image.shape[-1] == 4:
-                image = image[:, :, ::-1]
-            image = np.transpose(image, (2, 0, 1)).astype(np.float32)
+                image = image[:, :, :-1]
+            #image = np.transpose(image, (2, 0, 1)).astype(np.float32)
             label = np.load(join(self.root_dir, 
                                 '{0:06d}.npy'.format(idx)))[:2] # only x and y needed
             label = np.round(label).astype(np.int32)            
-        buff = np.zeros((image.shape[1], image.shape[2]), dtype=np.int64)
+        label = label[0] # for now just use left ee tip
+        buff = np.zeros((image.shape[0], image.shape[1]), dtype=np.int64)
         buff[label[1], label[0]] = 1
         label = buff
-        sample = (image, label)
-
+        image = skimage.img_as_float32(image)
+        sample = {'image': image, 'label': label}
+        #import ipdb; ipdb.set_trace()
         if self.transform:
             sample = self.transform(sample)
         return sample
