@@ -3,6 +3,7 @@ import sys
 import numpy as np
 from os.path import join
 import matplotlib.pyplot as plt
+import skimage
 
 import torch
 import torch.nn as nn
@@ -16,32 +17,28 @@ from ipdb import set_trace as st
 from models.eenet import define_model
 from util.utils import weight_init, set_gpu_mode, zeros, get_numpy
 from util.eebuilder import EndEffectorPositionDataset
+from util.transforms import Rescale, RandomCrop, ToTensor 
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
-# os.environ["CUDA_VISIBLE_DEVICES"]= "1, 2"
+os.environ["CUDA_VISIBLE_DEVICES"]= "1, 2"
 
 _LOSS = nn.NLLLoss
 ROOT_DIR = '/home/msieb/projects/bullet-demonstrations/experiments/reach/data'
-IMG_HEIGHT = 480
-IMG_WIDTH = 640
+IMG_HEIGHT = 240 
+IMG_WIDTH = 320
 # plt.ion()
 
 def compute_acc(labels_pred, y):
     N = len(labels_pred)
     corrects = labels_pred * y
     acc = torch.sum(corrects) / 2 / N
-    return get_numpy(acc)
+    return get_nu(acc)
 
-def labels_from_preds(preds):
-    prob = F.softmax(preds, dim=1)
-    _, indices = torch.topk(prob, 2)
-    labels_pred = zeros(preds.shape, requires_grad=False)
+def apply(func, M):
+     tList = [func(m) for m in torch.unbind(M, dim=0) ]
+     res = torch.stack(tList, dim=0)
+     return res
 
-    N = len(preds)
-    labels_pred[np.arange(N), indices[:, 0]] = 1
-    labels_pred[np.arange(N), indices[:, 1]] = 1
-
-    return labels_pred
 
 def forward_results(x, y, model):
     preds = model(x)
@@ -63,20 +60,24 @@ def imshow(img, pred, label):
     # plt.scatter(pred[0], pred[1], s=10, marker='.', c='r')
     plt.scatter(label[1], label[0], s=50, marker='.', c='r')
     pred /= np.sum(pred)
+    pred_label = np.where(pred <= np.min(pred))[1:]
+    plt.scatter(pred_label[1], pred_label[0], s=50, marker='.', c='b')
     plt.imshow(np.squeeze(pred), cmap="YlGnBu", interpolation='bilinear', alpha=0.4)
 
 def show_heatmap_of_samples(dataiter, model, use_cuda=True):
     n_display = 8
     for i in range(n_display):
         plt.subplot(2, 4, i+1)
-        image, label = dataiter.next()
+        sample= dataiter.next()
+        image = sample['image']
+        label = sample['label']
         if use_cuda:
             image = image.cuda()
             label = label.cuda()
         buf = np.where(label.cpu().numpy() ==1)[1:]
         label = (buf[0][0], buf[1][0])
         pred = model(image.cuda())
-        imshow(image.cpu().detach().numpy(), pred.cpu().detach().numpy(), label)
+        imshow(skimage.img_as_ubyte(image.cpu().detach().numpy()), pred.cpu().detach().numpy(), label)
     plt.show()
 
 
@@ -97,7 +98,6 @@ def train(model, loader_tr, loader_t, lr=1e-4, epochs=1000, use_cuda=True):
     num_batches_tr = len(loader_tr)
     num_batches_t = len(loader_t)
     dataiter = iter(loader_t)
-
     for e in t_epochs:
         # Train
         loss_tr = 0
@@ -107,13 +107,14 @@ def train(model, loader_tr, loader_t, lr=1e-4, epochs=1000, use_cuda=True):
         # show heatmap of samples
         show_heatmap_of_samples(dataiter, model)
         
-        for xb, yb in t_batches:
+        for sample in t_batches:
+            xb = sample['image']
+            yb = sample['label']
             if use_cuda:
                 xb = xb.cuda()
                 yb = yb.cuda()
             opt.zero_grad()
             pred = model(xb)
-
             loss = criterion(pred.view(pred.size()[0], -1), torch.max(yb.view(yb.size()[0], -1), 1)[1])
             # loss = criterion(pred, yb)
 
@@ -127,7 +128,7 @@ def train(model, loader_tr, loader_t, lr=1e-4, epochs=1000, use_cuda=True):
 
             # t_batches.set_description('Train: {:.2f}, {:.2f}'.format(loss, acc))
             t_batches.update()
-
+        
 
         loss_tr /= num_batches_tr
         acc_tr /= num_batches_tr
@@ -192,8 +193,19 @@ if __name__ == '__main__':
 
     logging.info('Loading {}'.format(args.root_dir))
     logging.info('Processing Data')
+    ## DEBUG
+    dataset2 = EndEffectorPositionDataset(root_dir=args.root_dir, 
+                                        load_data_and_labels_from_same_folder=args.load_data_and_labels_from_same_folder)
     
-    dataset = EndEffectorPositionDataset(root_dir=args.root_dir, load_data_and_labels_from_same_folder=args.load_data_and_labels_from_same_folder)
+    sample = dataset2[0]
+    ##
+    dataset = EndEffectorPositionDataset(root_dir=args.root_dir, 
+                                        transform=transforms.Compose(
+                                            [
+                                            Rescale((240, 320)),
+                                            ToTensor()
+                                            ]),                                        
+                                        load_data_and_labels_from_same_folder=args.load_data_and_labels_from_same_folder)
     n = len(dataset)
     n_test = int( n * .2 )  # number of test/val elements
     n_train = n - 2 * n_test
@@ -201,7 +213,7 @@ if __name__ == '__main__':
     loader_tr = DataLoader(dataset_tr, batch_size=2,
                         shuffle=True, num_workers=4)
     loader_t = DataLoader(dataset_t, batch_size=1, shuffle=True)                       
-
+    
     logging.info('Training.')
 
     # TODO
