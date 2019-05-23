@@ -106,8 +106,10 @@ class EENet(EmbeddingNet):
         # self.Deconv1 = nn.ConvTranspose2d(20, 1, kernel_size=3, stride=3) #, output_padding=1)
         # self.Deconv2 = nn.ConvTranspose2d(10, 1, kernel_size=3, stride=3) #, output_padding=1)
 
+        self.Dropout = nn.Dropout(p=0.3)
+        self.Dropout2d = nn.Dropout2d(p=0.3)
         self.Softmax2D = SoftmaxLogProbability2D()
-
+        self.LogSoftmax = nn.LogSoftmax()
         self.SpatialSoftmax = nn.Softmax2d()
         self.Softmax1d = nn.LogSoftmax()
         self.FullyConnected7a = Dense(23 * 23 * 20, img_height * img_width)
@@ -126,6 +128,8 @@ class EENet(EmbeddingNet):
         x = self.Conv2d_1a_3x3(x)
         # 149 x 149 x 32
         x = self.Conv2d_2a_3x3(x)
+        x = self.Dropout2d(x)
+
         # 147 x 147 x 32
         x = self.Conv2d_2b_3x3(x)
         # 147 x 147 x 64
@@ -134,6 +138,7 @@ class EENet(EmbeddingNet):
         x = self.Conv2d_3b_1x1(x)
         # 73 x 73 x 80
         x = self.Conv2d_4a_3x3(x)
+        x = self.Dropout2d(x)
         # 71 x 71 x 192
         x = F.max_pool2d(x, kernel_size=3, stride=2)
         # 35 x 35 x 192
@@ -144,6 +149,7 @@ class EENet(EmbeddingNet):
         y = self.Mixed_5d(x)
         # 33 x 33 x 100
         x = self.Conv2d_6a_3x3(y)
+        x = self.Dropout2d(x)
         # 31 x 31 x 20
         # x = self.Conv2d_6b_3x3(x)
 
@@ -153,7 +159,11 @@ class EENet(EmbeddingNet):
         x = F.interpolate(x, mode='nearest', size=(self.img_height, self.img_width))
 
         # x = nn.functional.interpolate(x, (self.img_height, self.img_width))
-        x = self.Softmax2D(x)
+        # x = self.Softmax2D(x)
+        x = x.view(x.size()[0], -1)
+        x = self.Dropout(x)
+        x = self.LogSoftmax(x)
+        x = x.view(x.size()[0], self.img_height, self.img_width)
         # print(x.shape)
         
         # x = self.Deconv2(x)
@@ -165,7 +175,8 @@ class EENet(EmbeddingNet):
         # Probabilistic softmax output
         # x = self.Softmax1d(x)
         # x = x.view(x.size()[0], self.img_height, self.img_width)
-        return x.squeeze_(1)
+        # return x.squeeze_(1)
+        return x
 
 def define_model(img_height, img_width, pretrained=True):
     return EENet(img_height, img_width, models.inception_v3(pretrained=pretrained))

@@ -446,16 +446,22 @@ def main():
 
     view_dirs, vid_paths, debug_path, seqname, view_dirs_depth, depth_paths, debug_path_depth = setup_paths_w_depth()
 
+    offsets = []
+    for view_idx, vid_path in enumerate(vid_paths):
+      if not os.path.exists(vid_paths[view_idx].strip('.mp4')):
+        os.makedirs(vid_paths[view_idx].strip('.mp4'))
+      if not os.path.exists(depth_paths[view_idx].strip('.mp4')):
+        os.makedirs(depth_paths[view_idx].strip('.mp4'))   
+      files = sorted(os.listdir(vid_path.strip('.mp4')))
+      offsets.append(int(len(files) / 2))
+      
     for t in range(0, len(GLOBAL_DEPTH_BUFFER)):
       stacked_images = GLOBAL_IMAGE_BUFFER[t][0][:,:,::-1]
       for view_idx in range(len(device_indices)):
-        if not os.path.exists(vid_paths[view_idx].strip('.mp4')):
-          os.makedirs(vid_paths[view_idx].strip('.mp4'))
-        if not os.path.exists(depth_paths[view_idx].strip('.mp4')):
-          os.makedirs(depth_paths[view_idx].strip('.mp4'))        
-        cv2.imwrite(os.path.join(vid_paths[view_idx].strip('.mp4'), '{0:06d}.png'.format(t)), GLOBAL_IMAGE_BUFFER[t][view_idx][:,:,::-1])
-        cv2.imwrite(os.path.join(depth_paths[view_idx].strip('.mp4'), '{0:06d}.png'.format(t)), GLOBAL_DEPTH_BUFFER[t][view_idx].astype(np.uint8))
-        np.save(os.path.join(vid_paths[view_idx].strip('.mp4'), '{0:06d}.npy'.format(t)), GLOBAL_PIXEL_BUFFER[t][view_idx])
+        
+        cv2.imwrite(os.path.join(vid_paths[view_idx].strip('.mp4'), '{0:06d}.png'.format(t+offsets[view_idx])), GLOBAL_IMAGE_BUFFER[t][view_idx][:,:,::-1])
+        cv2.imwrite(os.path.join(depth_paths[view_idx].strip('.mp4'), '{0:06d}.png'.format(t+offsets[view_idx])), GLOBAL_DEPTH_BUFFER[t][view_idx].astype(np.uint8))
+        np.save(os.path.join(vid_paths[view_idx].strip('.mp4'), '{0:06d}.npy'.format(t+offsets[view_idx])), GLOBAL_PIXEL_BUFFER[t][view_idx])
     for p, q in zip(vid_paths, depth_paths):
       print('Writing final color picture to: %s' % p.strip('.mp4'))
       print('Writing final depth picture to: %s' % q.strip('.mp4'))

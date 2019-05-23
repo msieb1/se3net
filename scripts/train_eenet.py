@@ -18,9 +18,10 @@ from models.eenet import define_model
 from util.utils import weight_init, set_gpu_mode, zeros, get_numpy
 from util.eebuilder import EndEffectorPositionDataset
 from util.transforms import Rescale, RandomCrop, ToTensor 
+from torchsample.transforms.affine_transforms import Rotate
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"]= "1, 2"
+# os.environ["CUDA_VISIBLE_DEVICES"]= "1, 2"
 
 _LOSS = nn.NLLLoss
 ROOT_DIR = '/home/msieb/projects/bullet-demonstrations/experiments/reach/data'
@@ -59,8 +60,9 @@ def imshow(img, pred, label):
     plt.imshow(np.transpose(np.squeeze(img.astype(np.uint8)), (1, 2, 0)))
     # plt.scatter(pred[0], pred[1], s=10, marker='.', c='r')
     plt.scatter(label[1], label[0], s=50, marker='.', c='r')
-    pred /= np.sum(pred)
-    pred_label = np.where(pred <= np.min(pred))[1:]
+    pred /= np.abs(np.sum(np.exp(pred)))
+    pred_label = np.where(pred >= np.max(pred))[1:]
+
     plt.scatter(pred_label[1], pred_label[0], s=50, marker='.', c='b')
     plt.imshow(np.squeeze(pred), cmap="YlGnBu", interpolation='bilinear', alpha=0.4)
 
@@ -76,7 +78,9 @@ def show_heatmap_of_samples(dataiter, model, use_cuda=True):
             label = label.cuda()
         buf = np.where(label.cpu().numpy() ==1)[1:]
         label = (buf[0][0], buf[1][0])
+        model.eval()
         pred = model(image.cuda())
+        model.train()
         imshow(skimage.img_as_ubyte(image.cpu().detach().numpy()), pred.cpu().detach().numpy(), label)
     plt.show()
 
@@ -103,9 +107,9 @@ def train(model, loader_tr, loader_t, lr=1e-4, epochs=1000, use_cuda=True):
         loss_tr = 0
         acc_tr = 0
         t_batches = tqdm(loader_tr, leave=False, desc='Train')
-        import ipdb; ipdb.set_trace();
         # show heatmap of samples
-        show_heatmap_of_samples(dataiter, model)
+        if (e % 3 == 0):
+            show_heatmap_of_samples(dataiter, model)
         
         for sample in t_batches:
             xb = sample['image']
@@ -115,8 +119,18 @@ def train(model, loader_tr, loader_t, lr=1e-4, epochs=1000, use_cuda=True):
                 yb = yb.cuda()
             opt.zero_grad()
             pred = model(xb)
+
+            # t1 = torch.zeros(10, 10).view(1, -1).float()
+            # t1[0, 5] = 1
+            # t1 = torch.nn.LogSoftmax()(t1)
+            # t2 = torch.Tensor([5]).long()
+            # import ipdb; ipdb.set_trace()   
+            # loss = criterion(t1, t2)
+
+
+            # import ipdb; ipdb.set_trace();
             loss = criterion(pred.view(pred.size()[0], -1), torch.max(yb.view(yb.size()[0], -1), 1)[1])
-            # loss = criterion(pred, yb)
+            # loss = criterion(pred, torch.max(yb.view(yb.size()[0], -1), 1)[1])
 
             # labels_pred = labels_from_preds(pred)
             # acc = compute_acc(labels_pred, yb)
@@ -198,6 +212,11 @@ if __name__ == '__main__':
                                         load_data_and_labels_from_same_folder=args.load_data_and_labels_from_same_folder)
     
     sample = dataset2[0]
+    image = sample['image']
+    st()
+    tsfm = np.transpose(Rotate(30)(torch.Tensor(np.transpose(image, (2, 0, 1)))).numpy(), (1, 2, 0))
+    plt.imshow(tsfm)
+    plt.show()
     ##
     dataset = EndEffectorPositionDataset(root_dir=args.root_dir, 
                                         transform=transforms.Compose(
